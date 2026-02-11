@@ -1,0 +1,24 @@
+# core behaviour
+1 - Prompt to overwrite, compare, merge, or cancel.  optional flags for each would be helpful too. 
+2 - Ability to merge multiple profiles is a great idea
+3 - yes add Snapsho/Capture of an existing .opencode/ directory.  'ocmgr snapshot my-custom-profile .' 
+
+# profile structure
+4 - if there are plugin dependencies prompt to install now or user will handle later. still copy the plugins and provide the commands needed to install.
+5 - add the meta data suggested.  also include "extend" with info of what profile they were created from. 
+6 - Selective init would be nice, (phase 2)
+
+# Github sync
+7 - should be one repo with a collection of profiles.
+8 - Yes support both private and public repos.  I like the idea of a registry and a website to search and share them. (phase 2)
+9 - Support multiple mehods of authentication
+
+# Tui scope
+10 - yes 'ocmgr' with no arguements shoud launch the tui 
+11 - Editing is a good idea, have nvim be the editor.  
+
+# Build and Distribution  
+12 - go installation, I would like an install.sh script that can be called and run from a curl command.  Have the install.sh detect go and if its missing offer to isntall or if user does not want to output the instructions to install and close. 
+13 - I want to distribute via a curl command from github to run install.sh.  The other distibution channels will come later (phase 2), I would like Brew, Yay (arch aur), and install.sh 
+
+
