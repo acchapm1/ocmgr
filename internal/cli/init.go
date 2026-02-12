@@ -6,9 +6,14 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
+	"strconv"
 	"strings"
 
+	"github.com/acchapm1/ocmgr-app/internal/configgen"
 	"github.com/acchapm1/ocmgr-app/internal/copier"
+	"github.com/acchapm1/ocmgr-app/internal/mcps"
+	"github.com/acchapm1/ocmgr-app/internal/plugins"
 	"github.com/acchapm1/ocmgr-app/internal/resolver"
 	"github.com/acchapm1/ocmgr-app/internal/store"
 	"github.com/spf13/cobra"
@@ -81,6 +86,10 @@ func runInit(cmd *cobra.Command, args []string) error {
 	}
 	targetOpencode := filepath.Join(absTarget, ".opencode")
 
+	// Create a single reader for all interactive prompts.
+	// This avoids buffering issues when input is piped.
+	reader := bufio.NewReader(os.Stdin)
+
 	// Open the profile store.
 	s, err := store.NewStore()
 	if err != nil {
@@ -142,13 +151,10 @@ func runInit(cmd *cobra.Command, args []string) error {
 			relPath, _ := filepath.Rel(targetOpencode, dst)
 			fmt.Fprintf(os.Stderr, "Conflict: %s\n", relPath)
 			fmt.Fprintf(os.Stderr, "  [o]verwrite  [s]kip  [c]ompare  [a]bort\n")
-			scanner := bufio.NewScanner(os.Stdin)
 			for {
 				fmt.Fprintf(os.Stderr, "Choice: ")
-				if !scanner.Scan() {
-					return copier.ChoiceCancel, nil
-				}
-				switch strings.TrimSpace(strings.ToLower(scanner.Text())) {
+				input, _ := reader.ReadString('\n')
+				switch strings.TrimSpace(strings.ToLower(input)) {
 				case "o":
 					return copier.ChoiceOverwrite, nil
 				case "s":
@@ -216,25 +222,32 @@ func runInit(cmd *cobra.Command, args []string) error {
 	// Check for plugin dependencies.
 	if copier.DetectPluginDeps(targetOpencode) {
 		fmt.Fprintf(os.Stderr, "Plugin dependencies detected. Install now? [y/N] ")
-		scanner := bufio.NewScanner(os.Stdin)
-		if scanner.Scan() {
-			answer := strings.TrimSpace(strings.ToLower(scanner.Text()))
-			if answer == "y" {
-				if dryRun {
-					fmt.Printf("[dry run] Would run: bun install in %s\n", targetOpencode)
-				} else {
-					install := exec.Command("bun", "install")
-					install.Dir = targetOpencode
-					install.Stdout = os.Stdout
-					install.Stderr = os.Stderr
-					if err := install.Run(); err != nil {
-						return fmt.Errorf("bun install failed: %w", err)
-					}
-				}
+		answer, _ := reader.ReadString('\n')
+		answer = strings.TrimSpace(strings.ToLower(answer))
+		if answer == "y" {
+			if dryRun {
+				fmt.Printf("[dry run] Would run: bun install in %s\n", targetOpencode)
 			} else {
-				fmt.Printf("To install later, run: cd %s && bun install\n", targetOpencode)
+				install := exec.Command("bun", "install")
+				install.Dir = targetOpencode
+				install.Stdout = os.Stdout
+				install.Stderr = os.Stderr
+				if err := install.Run(); err != nil {
+					return fmt.Errorf("bun install failed: %w", err)
+				}
 			}
+		} else {
+			fmt.Printf("To install later, run: cd %s && bun install\n", targetOpencode)
 		}
+	}
+
+	// Prompt for plugins and MCPs (skip in dry-run mode).
+	if !dryRun {
+		if err := promptForPluginsAndMCPs(targetOpencode, reader); err != nil {
+			return fmt.Errorf("plugin/MCP selection: %w", err)
+		}
+	} else {
+		fmt.Printf("[dry run] Would prompt for plugins and MCP servers\n")
 	}
 
 	return nil
@@ -275,4 +288,235 @@ func slicesEqual(a, b []string) bool {
 		}
 	}
 	return true
+}
+
+// promptForPluginsAndMCPs prompts the user to select plugins and MCP servers.
+func promptForPluginsAndMCPs(targetDir string, reader *bufio.Reader) error {
+	// Load plugin registry
+	pluginRegistry, err := plugins.Load()
+	if err != nil {
+		return fmt.Errorf("loading plugins: %w", err)
+	}
+
+	// Load MCP registry
+	mcpRegistry, err := mcps.Load()
+	if err != nil {
+		return fmt.Errorf("loading MCPs: %w", err)
+	}
+
+	// Skip if nothing to configure
+	if pluginRegistry.IsEmpty() && mcpRegistry.IsEmpty() {
+		return nil
+	}
+
+	// Collect selected plugins and MCPs
+	selectedPlugins := []string{}
+	selectedMCPs := map[string]configgen.MCPEntry{}
+
+	// Prompt for plugins
+	if !pluginRegistry.IsEmpty() {
+		selected, err := promptForPlugins(pluginRegistry, reader)
+		if err != nil {
+			return err
+		}
+		selectedPlugins = selected
+	}
+
+	// Prompt for MCPs
+	if !mcpRegistry.IsEmpty() {
+		selected, err := promptForMCPs(mcpRegistry, reader)
+		if err != nil {
+			return err
+		}
+		selectedMCPs = selected
+	}
+
+	// Generate opencode.json if there's anything to write
+	if len(selectedPlugins) > 0 || len(selectedMCPs) > 0 {
+		opts := configgen.Options{
+			Plugins: selectedPlugins,
+			MCPs:    selectedMCPs,
+		}
+		if err := configgen.Generate(targetDir, opts); err != nil {
+			return fmt.Errorf("generating opencode.json: %w", err)
+		}
+		fmt.Printf("✓ Created opencode.json with %d plugin(s) and %d MCP server(s)\n",
+			len(selectedPlugins), len(selectedMCPs))
+	}
+
+	return nil
+}
+
+// promptForPlugins prompts the user to select plugins from the registry.
+func promptForPlugins(registry *plugins.Registry, reader *bufio.Reader) ([]string, error) {
+	fmt.Printf("\nWould you like to add plugins to this project? [y/N] ")
+	answer, _ := reader.ReadString('\n')
+	answer = strings.TrimSpace(strings.ToLower(answer))
+	if answer != "y" && answer != "yes" {
+		return nil, nil
+	}
+
+	// Display available plugins
+	fmt.Println("\nAvailable plugins:")
+	for i, p := range registry.List() {
+		fmt.Printf("  %d. %s\n", i+1, p.Name)
+		if p.Description != "" {
+			fmt.Printf("     %s\n", p.Description)
+		}
+	}
+	fmt.Printf("\nSelect plugins (comma-separated numbers, 'all', or 'none'): ")
+
+	input, _ := reader.ReadString('\n')
+	input = strings.TrimSpace(strings.ToLower(input))
+
+	if input == "none" || input == "" {
+		return nil, nil
+	}
+
+	if input == "all" {
+		return registry.Names(), nil
+	}
+
+	// Parse selection
+	return parseSelection(input, registry.List(), func(p plugins.Plugin) string {
+		return p.Name
+	})
+}
+
+// promptForMCPs prompts the user to select MCP servers from the registry.
+func promptForMCPs(registry *mcps.Registry, reader *bufio.Reader) (map[string]configgen.MCPEntry, error) {
+	fmt.Printf("\nWould you like to add MCP servers to this project? [y/N] ")
+	answer, _ := reader.ReadString('\n')
+	answer = strings.TrimSpace(strings.ToLower(answer))
+	if answer != "y" && answer != "yes" {
+		return nil, nil
+	}
+
+	// Display available MCPs
+	fmt.Println("\nAvailable MCP servers:")
+	for i, m := range registry.List() {
+		fmt.Printf("  %d. %s\n", i+1, m.Name)
+		if m.Description != "" {
+			fmt.Printf("     %s\n", m.Description)
+		}
+	}
+	fmt.Printf("\nSelect MCP servers (comma-separated numbers, 'all', or 'none'): ")
+
+	input, _ := reader.ReadString('\n')
+	input = strings.TrimSpace(strings.ToLower(input))
+
+	if input == "none" || input == "" {
+		return nil, nil
+	}
+
+	if input == "all" {
+		result := make(map[string]configgen.MCPEntry)
+		for _, m := range registry.List() {
+			result[m.Name] = mcpConfigToEntry(m.Config)
+		}
+		return result, nil
+	}
+
+	// Parse selection
+	selected, err := parseSelection(input, registry.List(), func(m mcps.Definition) string {
+		return m.Name
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	result := make(map[string]configgen.MCPEntry)
+	for _, name := range selected {
+		if m := registry.GetByName(name); m != nil {
+			result[name] = mcpConfigToEntry(m.Config)
+		}
+	}
+	return result, nil
+}
+
+// parseSelection parses a comma-separated list of numbers into selected items.
+func parseSelection[T any](input string, items []T, getName func(T) string) ([]string, error) {
+	var selected []string
+	seen := make(map[string]bool)
+
+	parts := strings.Split(input, ",")
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+
+		num, err := strconv.Atoi(part)
+		if err != nil {
+			continue // skip invalid entries
+		}
+
+		if num < 1 || num > len(items) {
+			continue // skip out of range
+		}
+
+		name := getName(items[num-1])
+		if !seen[name] {
+			seen[name] = true
+			selected = append(selected, name)
+		}
+	}
+
+	// Sort for consistent output
+	sort.Strings(selected)
+	return selected, nil
+}
+
+// mcpConfigToEntry converts an MCP config map to an MCPEntry struct.
+func mcpConfigToEntry(config map[string]interface{}) configgen.MCPEntry {
+	entry := configgen.MCPEntry{}
+
+	if v, ok := config["type"].(string); ok {
+		entry.Type = v
+	}
+	if v, ok := config["url"].(string); ok {
+		entry.URL = v
+	}
+	if v, ok := config["enabled"].(bool); ok {
+		entry.Enabled = v
+	}
+	if v, ok := config["timeout"].(float64); ok {
+		entry.Timeout = int(v)
+	}
+
+	// Handle command array
+	if cmd, ok := config["command"].([]interface{}); ok {
+		for _, c := range cmd {
+			if s, ok := c.(string); ok {
+				entry.Command = append(entry.Command, s)
+			}
+		}
+	}
+
+	// Handle environment map
+	if env, ok := config["environment"].(map[string]interface{}); ok {
+		entry.Environment = make(map[string]string)
+		for k, v := range env {
+			if s, ok := v.(string); ok {
+				entry.Environment[k] = s
+			}
+		}
+	}
+
+	// Handle headers map
+	if headers, ok := config["headers"].(map[string]interface{}); ok {
+		entry.Headers = make(map[string]string)
+		for k, v := range headers {
+			if s, ok := v.(string); ok {
+				entry.Headers[k] = s
+			}
+		}
+	}
+
+	// Handle oauth
+	if oauth, ok := config["oauth"]; ok {
+		entry.OAuth = oauth
+	}
+
+	return entry
 }

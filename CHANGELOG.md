@@ -10,15 +10,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
-- **Plugin selection feature plan** (`plugintodo.md`)
-  - Phase 1: Remove opencode.json from copy process
-  - Phase 2: Interactive plugin selection during `ocmgr init`
+- **Plugin selection feature** (Phase 2 - IMPLEMENTED)
+  - Interactive plugin selection during `ocmgr init`
   - Plugins loaded from `~/.ocmgr/plugins/plugins.toml`
+  - Supports selecting multiple plugins by number, 'all', or 'none'
+  - New package: `internal/plugins/` for plugin registry loading
 
-- **MCP server selection feature plan** (`mcptodo.md`)
-  - Phase 3: Interactive MCP server selection during `ocmgr init`
+- **MCP server selection feature** (Phase 3 - IMPLEMENTED)
+  - Interactive MCP server selection during `ocmgr init`
   - MCPs loaded from individual JSON files in `~/.ocmgr/mcps/`
   - Supports npx-based, Docker-based, and remote MCP servers
+  - Supports selecting multiple MCPs by number, 'all', or 'none'
+  - New package: `internal/mcps/` for MCP registry loading
+
+- **Config generation package** (`internal/configgen/`)
+  - Generates `opencode.json` with `$schema`, plugins, and MCPs
+  - Merges with existing `opencode.json` if present
+  - Supports all MCP config types (local, remote, with OAuth)
 
 - **Sample MCP definition files** in `~/.ocmgr/mcps/`
   - `sequentialthinking.json` - npx-based sequential thinking MCP
@@ -31,7 +39,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   - TOML format with name and description for each plugin
   - Replaces plain text `plugins` file
 
+- **Planning documents**
+  - `plugintodo.md` - Detailed implementation plan for plugin selection feature
+  - `mcptodo.md` - Detailed implementation plan for MCP server selection feature
+
 ### Changed
+
+- **internal/copier/copier.go** - Removed opencode.json from copy process
+  - `profileFiles` map is now empty
+  - `opencode.json` is no longer copied from profiles
+  - Updated doc comments to reflect new behavior
+
+- **internal/cli/init.go** - Added interactive prompts
+  - Added plugin selection prompt after profile copy
+  - Added MCP server selection prompt after plugin selection
+  - Uses shared `bufio.Reader` for all prompts to avoid buffering issues
+  - Generates `opencode.json` with selected plugins and MCPs
 
 - **USAGE.md** - Comprehensive documentation updates
   - Added Table of Contents entries for all commands
@@ -43,12 +66,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   - Updated "Sharing Profiles" workflow section with full GitHub sync instructions
   - Removed "(Phase 2)" references from config documentation
 
-- **internal/copier/copier.go** - Added support for root-level profile files
-  - Added `profileFiles` map for recognised root-level files (e.g., `opencode.json`)
-  - Updated walk filter logic to allow root-level files through to copy logic
-  - Updated include/exclude filtering to not block root-level profile files
-  - Updated doc comments to reflect new behavior
-  - `opencode.json` is now copied during `ocmgr init` (to be removed in Phase 1 of plugin feature)
+### Removed
+
+- Template `opencode.json` files from `~/.ocmgr/profiles/base/` and `~/.ocmgr/profiles/macos-base/`
+  - No longer needed since `opencode.json` is now generated dynamically
 
 ---
 
@@ -92,18 +113,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ---
 
 ## Future Roadmap
-
-### Phase 1 - Remove opencode.json Copy
-- Remove `opencode.json` from `profileFiles` map
-- Delete template `opencode.json` files from profiles
-
-### Phase 2 - Plugin Selection
-- Interactive plugin selection during `ocmgr init`
-- Generate `opencode.json` with selected plugins
-
-### Phase 3 - MCP Server Selection
-- Interactive MCP server selection during `ocmgr init`
-- Merge MCP configs into generated `opencode.json`
 
 ### Phase 4 - Interactive TUI
 - Full TUI built with Charmbracelet (Bubble Tea, Huh, Lip Gloss)
