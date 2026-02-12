@@ -43,6 +43,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   - `plugintodo.md` - Detailed implementation plan for plugin selection feature
   - `mcptodo.md` - Detailed implementation plan for MCP server selection feature
 
+- **Self-update command** (`ocmgr update`)
+  - Check for and install latest version from GitHub releases
+  - Support specific version: `ocmgr update v0.2.0`
+  - Detect installation method (curl, homebrew, go install)
+  - Safe binary replacement with backup/restore on failure
+  - New package: `internal/updater/` for version checking and binary replacement
+
 ### Changed
 
 - **internal/copier/copier.go** - Removed opencode.json from copy process
