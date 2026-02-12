@@ -92,13 +92,23 @@ var profileDirs = map[string]bool{
 	"plugins":  true,
 }
 
+// profileFiles is the set of root-level files (no path separators)
+// inside a profile that are copied into .opencode/. Only filenames
+// directly under the profile root are supported; nested paths will
+// be silently skipped because their parent directory is not in
+// profileDirs.
+var profileFiles = map[string]bool{
+	"opencode.json": true,
+}
+
 // errCancelled is returned when the user chooses ChoiceCancel during an
 // interactive prompt.
 var errCancelled = errors.New("copy operation cancelled by user")
 
-// CopyProfile walks profileDir and copies the relevant subdirectories
-// (agents/, commands/, skills/, plugins/) into targetDir, applying the
-// conflict resolution strategy described in opts.
+// CopyProfile walks profileDir and copies the recognised content
+// directories (agents/, commands/, skills/, plugins/) and root-level
+// configuration files (e.g. opencode.json) into targetDir, applying
+// the conflict resolution strategy described in opts.
 //
 // profileDir is typically ~/.ocmgr/profiles/<name> and targetDir is the
 // project's .opencode/ directory.
@@ -136,26 +146,33 @@ func CopyProfile(profileDir, targetDir string, opts Options) (*Result, error) {
 		// "skills/analyzing-projects/SKILL.md").
 		topLevel := strings.SplitN(rel, string(filepath.Separator), 2)[0]
 
-		// Only descend into recognised profile directories.
+		// Only descend into recognised profile directories. Recognised
+		// root-level files (e.g. opencode.json) are allowed through to
+		// the copy logic below; everything else is skipped.
 		if !profileDirs[topLevel] {
 			if d.IsDir() {
 				return filepath.SkipDir
 			}
-			return nil // skip loose files like profile.toml
+			if !profileFiles[rel] {
+				return nil // skip loose files like profile.toml
+			}
 		}
 
-		// Apply --only / --exclude filtering.
-		if len(includeSet) > 0 && !includeSet[topLevel] {
-			if d.IsDir() {
-				return filepath.SkipDir
+		// Apply include/exclude directory filtering (only to content
+		// directories, not to recognised root-level files).
+		if !profileFiles[rel] {
+			if len(includeSet) > 0 && !includeSet[topLevel] {
+				if d.IsDir() {
+					return filepath.SkipDir
+				}
+				return nil
 			}
-			return nil
-		}
-		if len(excludeSet) > 0 && excludeSet[topLevel] {
-			if d.IsDir() {
-				return filepath.SkipDir
+			if len(excludeSet) > 0 && excludeSet[topLevel] {
+				if d.IsDir() {
+					return filepath.SkipDir
+				}
+				return nil
 			}
-			return nil
 		}
 
 		// Nothing to copy for directories themselves; they are created
