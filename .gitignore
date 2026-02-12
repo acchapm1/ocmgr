@@ -3,6 +3,9 @@ ocmgr
 /bin/
 /dist/
 
+# Opencode
+.opencode/
+
 # Go
 *.exe
 *.exe~
