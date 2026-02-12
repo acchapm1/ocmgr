@@ -9,20 +9,22 @@ REPO="acchapm1/ocmgr-app"
 BINARY="ocmgr"
 INSTALL_DIR="${INSTALL_DIR:-$HOME/.local/bin}"
 
-# Colors
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-BOLD='\033[1m'
-NC='\033[0m' # No Color
+# Colors — use $'...' (ANSI-C quoting) so escape bytes are embedded at
+# assignment time.  This makes every echo work regardless of whether the
+# shell's built-in echo supports -e.
+RED=$'\033[0;31m'
+GREEN=$'\033[0;32m'
+YELLOW=$'\033[1;33m'
+BLUE=$'\033[0;34m'
+BOLD=$'\033[1m'
+NC=$'\033[0m' # No Color
 
-info()  { echo -e "${BLUE}ℹ${NC}  $*"; }
-ok()    { echo -e "${GREEN}✓${NC}  $*"; }
-warn()  { echo -e "${YELLOW}⚠${NC}  $*"; }
-error() { echo -e "${RED}✗${NC}  $*" >&2; }
+info()  { echo "${BLUE}ℹ${NC}  $*"; }
+ok()    { echo "${GREEN}✓${NC}  $*"; }
+warn()  { echo "${YELLOW}⚠${NC}  $*"; }
+error() { echo "${RED}✗${NC}  $*" >&2; }
 
-echo -e "${BOLD}ocmgr installer${NC}"
+echo "${BOLD}ocmgr installer${NC}"
 echo ""
 
 # ─── Detect OS and Architecture ───────────────────────────────────────────────
@@ -81,16 +83,16 @@ install_go_prompt() {
     echo ""
     echo "  To install Go manually:"
     echo ""
-    echo -e "    ${BOLD}Linux (apt):${NC}"
+    echo "    ${BOLD}Linux (apt):${NC}"
     echo "      sudo apt update && sudo apt install -y golang-go"
     echo ""
-    echo -e "    ${BOLD}Linux (snap):${NC}"
+    echo "    ${BOLD}Linux (snap):${NC}"
     echo "      sudo snap install go --classic"
     echo ""
-    echo -e "    ${BOLD}macOS (Homebrew):${NC}"
+    echo "    ${BOLD}macOS (Homebrew):${NC}"
     echo "      brew install go"
     echo ""
-    echo -e "    ${BOLD}Any platform:${NC}"
+    echo "    ${BOLD}Any platform:${NC}"
     echo "      https://go.dev/dl/"
     echo ""
     echo "  After installing Go, re-run this script."
