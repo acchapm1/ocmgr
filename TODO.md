@@ -121,6 +121,24 @@ A CLI (and eventually TUI) tool written in Go that manages `.opencode` directory
 - [x] `ocmgr profile import <path|url>` — import from directory or GitHub URL
 - [x] `ocmgr profile export <name> <path>` — export to directory
 
+### 2.6 — Plugin & MCP Selection (IMPLEMENTED)
+- [x] Plugin selection during `ocmgr init`
+  - Interactive prompt: "Would you like to add plugins?"
+  - Select from `~/.ocmgr/plugins/plugins.toml`
+  - Support: comma-separated numbers, 'all', 'none'
+- [x] MCP server selection during `ocmgr init`
+  - Interactive prompt: "Would you like to add MCP servers?"
+  - Select from `~/.ocmgr/mcps/*.json`
+  - Support: npx-based, Docker-based, remote MCPs
+- [x] Generate `opencode.json` with `$schema`, plugins, and MCPs
+- [x] Merge with existing `opencode.json` if present
+
+### 2.7 — Self-Update Command (IMPLEMENTED)
+- [x] `ocmgr update` — update to latest version from GitHub releases
+- [x] `ocmgr update v0.2.0` — update to specific version
+- [x] Detect installation method (curl, homebrew, go install)
+- [x] Safe binary replacement with backup/restore on failure
+
 ---
 
 ## Phase 3: TUI (Charmbracelet)
